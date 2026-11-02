@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Шукач — швидкий пошук програм</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🔍</text></svg>">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f3f4f6; min-height:100vh; padding-bottom:80px; }
+  header { background:#2563eb; color:#fff; padding:24px 16px 16px; position:sticky; top:0; z-index:10; }
+  h1 { font-size:20px; display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  .search-row { display:flex; gap:8px; }
+  input { flex:1; padding:14px 16px; border:none; border-radius:12px; font-size:16px; outline:none; }
+  .btn { background:#1e40af; color:#fff; border:none; border-radius:12px; padding:0 18px; font-size:16px; cursor:pointer; }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding:12px 16px; }
+  .chip { white-space:nowrap; padding:8px 14px; background:#fff; border-radius:999px; font-size:14px; cursor:pointer; border:1px solid #e5e7eb; }
+  .chip.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+  main { padding:8px 16px; max-width:640px; margin:0 auto; }
+  .app-card { display:flex; align-items:center; gap:12px; background:#fff; border-radius:14px; padding:14px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); cursor:pointer; }
+  .app-card:active { background:#eff6ff; }
+  .icon { font-size:34px; width:52px; height:52px; display:flex; align-items:center; justify-content:center; background:#f9fafb; border-radius:12px; flex-shrink:0; }
+  .info { flex:1; min-width:0; }
+  .name { font-weight:600; font-size:16px; color:#111827; }
+  .cat { font-size:13px; color:#6b7280; margin-top:2px; }
+  .hint { text-align:center; color:#9ca3af; padding:32px 0; font-size:15px; }
+  .tip { position:fixed; bottom:0; left:0; right:0; background:#eff6ff; color:#1e40af; text-align:center; padding:12px 16px; font-size:14px; border-top:1px solid #bfdbfe; }
+  .toast { position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 18px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔍 Шукач</h1>
+  <div class="search-row">
+    <input id="q" type="search" placeholder="Введіть назву програми…" autocomplete="off">
+    <button class="btn" onclick="voiceSearch()">🎙</button>
+  </div>
+</header>
+<div class="chips" id="chips"></div>
+<main id="list"></main>
+<div class="toast" id="toast"></div>
+<div class="tip">💡 Порада: додайте цю сторінку на головний екран — і «Шукач» завжди буде під рукою</div>
+
+<script>
+const APPS = [
+  {n:'Facebook', c:'Соціальні мережі', i:'📘', and:'com.facebook.katana', ios:'facebook'},
+  {n:'Instagram', c:'Соціальні мережі', i:'📸', and:'com.instagram.android', ios:'instagram'},
+  {n:'TikTok', c:'Соціальні мережі', i:'🎵', and:'com.zhiliaoapp.musically', ios:'tiktok'},
+  {n:'X (Twitter)', c:'Соціальні мережі', i:'🐦', and:'com.twitter.android', ios:'twitter'},
+  {n:'LinkedIn', c:'Соціальні мережі', i:'💼', and:'com.linkedin.android', ios:'linkedin'},
+  {n:'Telegram', c:'Месенджери', i:'✈️', and:'org.telegram.messenger', ios:'telegram'},
+  {n:'WhatsApp', c:'Месенджери', i:'💬', and:'com.whatsapp', ios:'whatsapp'},
+  {n:'Viber', c:'Месенджери', i:'📞', and:'com.viber.voip', ios:'viber'},
+  {n:'Signal', c:'Месенджери', i:'🔒', and:'org.thoughtcrime.securesms', ios:'signal'},
+  {n:'Messenger', c:'Месенджери', i:'💠', and:'com.facebook.orca', ios:'messenger'},
+  {n:'Gmail', c:'Пошта', i:'✉️', and:'com.google.android.gm', ios:'gmail'},
+  {n:'Outlook', c:'Пошта', i:'📨', and:'com.microsoft.office.outlook', ios:'outlook'},
+  {n:'Chrome', c:'Браузери', i:'🌐', and:'com.android.chrome', ios:'chrome'},
+  {n:'Firefox', c:'Браузери', i:'🦊', and:'org.mozilla.firefox', ios:'firefox'},
+  {n:'YouTube', c:'Відео', i:'🎬', and:'com.google.android.youtube', ios:'youtube'},
+  {n:'YouTube Music', c:'Музика', i:'🎶', and:'com.google.android.apps.youtube.music', ios:'youtubemusic'},
+  {n:'Spotify', c:'Музика', i:'🎧', and:'com.spotify.music', ios:'spotify'},
+  {n:'Google Maps', c:'Навігація', i:'🗺️', and:'com.google.android.apps.maps', ios:'maps'},
+  {n:'Uber', c:'Навігація', i:'🚗', and:'com.ubercab', ios:'uber'},
+  {n:'Bolt', c:'Навігація', i:'⚡', and:'ee.mtakso.client', ios:'bolt'},
+  {n:'Google Photos', c:'Фото та відео', i:'🖼️', and:'com.google.android.apps.photos', ios:'googlephotos'},
+  {n:'Google Play', c:'Магазин', i:'▶️', and:'com.android.vending', ios:'appstore'},
+  {n:'Налаштування', c:'Система', i:'⚙️', and:'com.android.settings', ios:'settings'}
+];
+
+const FAV_KEY = 'shukach_favs';
+let favs = JSON.parse(localStorage.getItem(FAV_KEY) || '["Telegram","WhatsApp","Gmail","Chrome"]');
+let cat = 'Усі';
+
+const cats = ['Усі', ...new Set(APPS.map(a => a.c))];
+
+const chipsEl = document.getElementById('chips');
+const listEl = document.getElementById('list');
+const qEl = document.getElementById('q');
+
+function isIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+
+function openApp(a) {
+  if (isIOS()) {
+    location.href = a.ios + '://';
+    setTimeout(() => { showToast('Якщо програма не відкрилась — вона не встановлена'); }, 1200);
+  } else {
+    location.href = 'intent://' + a.n + '#Intent;package=' + a.and + ';end';
+    setTimeout(() => { showToast('Якщо програма не відкрилась — вона не встановлена'); }, 1200);
+  }
+}
+
+function searchInStore(a) {
+  if (isIOS()) location.href = 'https://apps.apple.com/search?term=' + encodeURIComponent(a.n);
+  else location.href = 'https://play.google.com/store/search?q=' + encodeURIComponent(a.n) + '&c=apps';
+}
+
+function toggleFav(a, e) {
+  e.stopPropagation();
+  favs = favs.includes(a.n) ? favs.filter(f => f !== a.n) : [...favs, a.n];
+  localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+  render();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function norm(s) {
+  const map = {а:'a',б:'b',в:'v',г:'h',д:'d',е:'e',є:'ie',ж:'zh',з:'z',и:'y',і:'i',ї:'i',й:'i',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'kh',ц:'ts',ч:'ch',ш:'sh',щ:'shch',ь:'',ю:'iu',я:'ia',yo:'io'};
+  return s.toLowerCase().split('').map(ch => map[ch] !== undefined ? map[ch] : ch).join('');
+}
+
+function render() {
+  chipsEl.innerHTML = cats.map(c =>
+    '<div class="chip ' + (c === cat ? 'active' : '') + '" onclick="setCat(\'' + c + '\')">' + c + '</div>'
+  ).join('');
+
+  const q = norm(qEl.value.trim());
+  const items = APPS
+    .filter(a => (cat === 'Усі' || a.c === cat) && (!q || norm(a.n).includes(q) || norm(a.c).includes(q)))
+    .sort((a, b) => favs.includes(b.n) - favs.includes(a.n));
+
+  if (!items.length) {
+    listEl.innerHTML = '<div class="hint">Нічого не знайдено 😕<br>Спробуйте іншу назву</div>';
+    return;
+  }
+  listEl.innerHTML = items.map(a => (
+    '<div class="app-card" onclick="openApp(APPS[' + APPS.indexOf(a) + '])">' +
+      '<div class="icon">' + a.i + '</div>' +
+      '<div class="info"><div class="name">' + a.n + '</div><div class="cat">' + a.c + '</div></div>' +
+      '<div style="font-size:22px;cursor:pointer" onclick="toggleFav(APPS[' + APPS.indexOf(a) + '],event)">' + (favs.includes(a.n) ? '⭐' : '☆') + '</div>' +
+      '<div onclick="searchInStore(APPS[' + APPS.indexOf(a) + ']);event.stopPropagation()" style="padding:8px;color:#2563eb;font-size:13px">⤓</div>' +
+    '</div>'
+  )).join('');
+}
+
+function setCat(c) { cat = c; render(); }
+qEl.addEventListener('input', render);
+
+function voiceSearch() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Голосовий пошук не підтримується на цьому пристрої'); return; }
+  const r = new SR();
+  r.lang = 'uk-UA';
+  r.onresult = e => { qEl.value = e.results[0][0].transcript; render(); };
+  r.onerror = () => showToast('Не вдалося розпізнати голос');
+  r.start();
+  showToast('Говоріть назву програми…');
+}
+
+render();
+</script>
+</body>
+</html>
